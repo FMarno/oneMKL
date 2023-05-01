@@ -24,157 +24,148 @@
 
 template <oneapi::mkl::dft::precision precision, oneapi::mkl::dft::domain domain>
 int DFT_Test<precision, domain>::test_out_of_place_real_real_USM() {
+    static_assert(domain != oneapi::mkl::dft::domain::REAL,
+                  "real to complex REAL_REAL transforms are not supported");
+
     if (!init(MemoryAccessModel::usm)) {
         return test_skipped;
     }
 
-    if constexpr (domain == oneapi::mkl::dft::domain::REAL) {
-        std::cout << "skipping real split tests as they are not supported" << std::endl;
+    descriptor_t descriptor{ sizes };
 
+    PrecisionType backward_scale = 1.f / static_cast<PrecisionType>(forward_elements);
+    descriptor.set_value(oneapi::mkl::dft::config_param::PLACEMENT,
+                         oneapi::mkl::dft::config_value::NOT_INPLACE);
+    descriptor.set_value(oneapi::mkl::dft::config_param::COMPLEX_STORAGE,
+                         oneapi::mkl::dft::config_value::REAL_REAL);
+    descriptor.set_value(oneapi::mkl::dft::config_param::NUMBER_OF_TRANSFORMS, batches);
+    descriptor.set_value(oneapi::mkl::dft::config_param::FWD_DISTANCE, forward_elements);
+    descriptor.set_value(oneapi::mkl::dft::config_param::BWD_DISTANCE, forward_elements);
+    descriptor.set_value(oneapi::mkl::dft::config_param::BACKWARD_SCALE, backward_scale);
+
+    commit_descriptor(descriptor, sycl_queue);
+
+    auto ua_input = usm_allocator_t<PrecisionType>(cxt, *dev);
+    auto ua_output = usm_allocator_t<PrecisionType>(cxt, *dev);
+
+    std::vector<PrecisionType, decltype(ua_input)> in_re(size_total, ua_input);
+    std::vector<PrecisionType, decltype(ua_input)> in_im(size_total, ua_input);
+    std::vector<PrecisionType, decltype(ua_output)> out_re(size_total, ua_output);
+    std::vector<PrecisionType, decltype(ua_output)> out_im(size_total, ua_output);
+    std::vector<PrecisionType, decltype(ua_input)> out_back_re(size_total, ua_input);
+    std::vector<PrecisionType, decltype(ua_input)> out_back_im(size_total, ua_input);
+
+    std::copy(input_re.begin(), input_re.end(), in_re.begin());
+    std::copy(input_im.begin(), input_im.end(), in_im.begin());
+
+    std::vector<sycl::event> dependencies;
+
+    try {
+        oneapi::mkl::dft::compute_forward<descriptor_t, PrecisionType, PrecisionType>(
+            descriptor, in_re.data(), in_im.data(), out_re.data(), out_im.data(), dependencies)
+            .wait();
+    }
+    catch (oneapi::mkl::unimplemented &e) {
+        std::cout << "Skipping test because: \"" << e.what() << "\"" << std::endl;
         return test_skipped;
     }
-    else {
-        descriptor_t descriptor{ sizes };
-
-        PrecisionType backward_scale = 1.f / static_cast<PrecisionType>(forward_elements);
-        descriptor.set_value(oneapi::mkl::dft::config_param::PLACEMENT,
-                             oneapi::mkl::dft::config_value::NOT_INPLACE);
-        descriptor.set_value(oneapi::mkl::dft::config_param::COMPLEX_STORAGE,
-                             oneapi::mkl::dft::config_value::REAL_REAL);
-        descriptor.set_value(oneapi::mkl::dft::config_param::NUMBER_OF_TRANSFORMS, batches);
-        descriptor.set_value(oneapi::mkl::dft::config_param::FWD_DISTANCE, forward_elements);
-        descriptor.set_value(oneapi::mkl::dft::config_param::BWD_DISTANCE, forward_elements);
-        descriptor.set_value(oneapi::mkl::dft::config_param::BACKWARD_SCALE, backward_scale);
-
-        commit_descriptor(descriptor, sycl_queue);
-
-        auto ua_input = usm_allocator_t<PrecisionType>(cxt, *dev);
-        auto ua_output = usm_allocator_t<PrecisionType>(cxt, *dev);
-
-        std::vector<PrecisionType, decltype(ua_input)> in_re(size_total, ua_input);
-        std::vector<PrecisionType, decltype(ua_input)> in_im(size_total, ua_input);
-        std::vector<PrecisionType, decltype(ua_output)> out_re(size_total, ua_output);
-        std::vector<PrecisionType, decltype(ua_output)> out_im(size_total, ua_output);
-        std::vector<PrecisionType, decltype(ua_input)> out_back_re(size_total, ua_input);
-        std::vector<PrecisionType, decltype(ua_input)> out_back_im(size_total, ua_input);
-
-        std::copy(input_re.begin(), input_re.end(), in_re.begin());
-        std::copy(input_im.begin(), input_im.end(), in_im.begin());
-
-        std::vector<sycl::event> dependencies;
-
-        try {
-            oneapi::mkl::dft::compute_forward<descriptor_t, PrecisionType, PrecisionType>(
-                descriptor, in_re.data(), in_im.data(), out_re.data(), out_im.data(), dependencies)
-                .wait();
-        }
-        catch (oneapi::mkl::unimplemented &e) {
-            std::cout << "Skipping test because: \"" << e.what() << "\"" << std::endl;
-            return test_skipped;
-        }
-        std::vector<FwdOutputType> output_data(size_total);
-        for (std::size_t i = 0; i < output_data.size(); ++i) {
-            output_data[i] = { out_re[i], out_im[i] };
-        }
-        EXPECT_TRUE(check_equal_vector(output_data.data(), out_host_ref.data(), output_data.size(),
-                                       abs_error_margin, rel_error_margin, std::cout));
-
-        try {
-            oneapi::mkl::dft::compute_backward<std::remove_reference_t<decltype(descriptor)>,
-                                               PrecisionType, PrecisionType>(
-                descriptor, out_re.data(), out_im.data(), out_back_re.data(), out_back_im.data())
-                .wait();
-        }
-        catch (oneapi::mkl::unimplemented &e) {
-            std::cout << "Skipping test because: \"" << e.what() << "\"" << std::endl;
-            return test_skipped;
-        }
-
-        for (std::size_t i = 0; i < output_data.size(); ++i) {
-            output_data[i] = { out_back_re[i], out_back_im[i] };
-        }
-
-        EXPECT_TRUE(check_equal_vector(output_data.data(), input.data(), input.size(),
-                                       abs_error_margin, rel_error_margin, std::cout));
+    std::vector<FwdOutputType> output_data(size_total);
+    for (std::size_t i = 0; i < output_data.size(); ++i) {
+        output_data[i] = { out_re[i], out_im[i] };
     }
+    EXPECT_TRUE(check_equal_vector(output_data.data(), out_host_ref.data(), output_data.size(),
+                                   abs_error_margin, rel_error_margin, std::cout));
+
+    try {
+        oneapi::mkl::dft::compute_backward<std::remove_reference_t<decltype(descriptor)>,
+                                           PrecisionType, PrecisionType>(
+            descriptor, out_re.data(), out_im.data(), out_back_re.data(), out_back_im.data())
+            .wait();
+    }
+    catch (oneapi::mkl::unimplemented &e) {
+        std::cout << "Skipping test because: \"" << e.what() << "\"" << std::endl;
+        return test_skipped;
+    }
+
+    for (std::size_t i = 0; i < output_data.size(); ++i) {
+        output_data[i] = { out_back_re[i], out_back_im[i] };
+    }
+
+    EXPECT_TRUE(check_equal_vector(output_data.data(), input.data(), input.size(), abs_error_margin,
+                                   rel_error_margin, std::cout));
 
     return !::testing::Test::HasFailure();
 }
 
 template <oneapi::mkl::dft::precision precision, oneapi::mkl::dft::domain domain>
 int DFT_Test<precision, domain>::test_out_of_place_real_real_buffer() {
+    static_assert(domain != oneapi::mkl::dft::domain::REAL,
+                  "real to complex REAL_REAL transforms are not supported");
+
     if (!init(MemoryAccessModel::buffer)) {
         return test_skipped;
     }
 
-    if constexpr (domain == oneapi::mkl::dft::domain::REAL) {
-        std::cout << "skipping real split tests as they are not supported" << std::endl;
+    descriptor_t descriptor{ sizes };
 
+    PrecisionType backward_scale = 1.f / static_cast<PrecisionType>(forward_elements);
+    descriptor.set_value(oneapi::mkl::dft::config_param::PLACEMENT,
+                         oneapi::mkl::dft::config_value::NOT_INPLACE);
+    descriptor.set_value(oneapi::mkl::dft::config_param::COMPLEX_STORAGE,
+                         oneapi::mkl::dft::config_value::REAL_REAL);
+    descriptor.set_value(oneapi::mkl::dft::config_param::NUMBER_OF_TRANSFORMS, batches);
+    descriptor.set_value(oneapi::mkl::dft::config_param::FWD_DISTANCE, forward_elements);
+    descriptor.set_value(oneapi::mkl::dft::config_param::BWD_DISTANCE, forward_elements);
+    descriptor.set_value(oneapi::mkl::dft::config_param::BACKWARD_SCALE, backward_scale);
+
+    commit_descriptor(descriptor, sycl_queue);
+
+    sycl::buffer<PrecisionType, 1> in_dev_re{ input_re.data(), sycl::range<1>(size_total) };
+    sycl::buffer<PrecisionType, 1> in_dev_im{ input_im.data(), sycl::range<1>(size_total) };
+    sycl::buffer<PrecisionType, 1> out_dev_re{ sycl::range<1>(size_total) };
+    sycl::buffer<PrecisionType, 1> out_dev_im{ sycl::range<1>(size_total) };
+    sycl::buffer<PrecisionType, 1> out_back_dev_re{ sycl::range<1>(size_total) };
+    sycl::buffer<PrecisionType, 1> out_back_dev_im{ sycl::range<1>(size_total) };
+
+    try {
+        oneapi::mkl::dft::compute_forward<descriptor_t, PrecisionType, PrecisionType>(
+            descriptor, in_dev_re, in_dev_im, out_dev_re, out_dev_im);
+    }
+    catch (oneapi::mkl::unimplemented &e) {
+        std::cout << "Skipping test because: \"" << e.what() << "\"" << std::endl;
         return test_skipped;
     }
-    else {
-        descriptor_t descriptor{ sizes };
 
-        PrecisionType backward_scale = 1.f / static_cast<PrecisionType>(forward_elements);
-        descriptor.set_value(oneapi::mkl::dft::config_param::PLACEMENT,
-                             oneapi::mkl::dft::config_value::NOT_INPLACE);
-        descriptor.set_value(oneapi::mkl::dft::config_param::COMPLEX_STORAGE,
-                             oneapi::mkl::dft::config_value::REAL_REAL);
-        descriptor.set_value(oneapi::mkl::dft::config_param::NUMBER_OF_TRANSFORMS, batches);
-        descriptor.set_value(oneapi::mkl::dft::config_param::FWD_DISTANCE, forward_elements);
-        descriptor.set_value(oneapi::mkl::dft::config_param::BWD_DISTANCE, forward_elements);
-        descriptor.set_value(oneapi::mkl::dft::config_param::BACKWARD_SCALE, backward_scale);
-
-        commit_descriptor(descriptor, sycl_queue);
-
-        sycl::buffer<PrecisionType, 1> in_dev_re{ input_re.data(), sycl::range<1>(size_total) };
-        sycl::buffer<PrecisionType, 1> in_dev_im{ input_im.data(), sycl::range<1>(size_total) };
-        sycl::buffer<PrecisionType, 1> out_dev_re{ sycl::range<1>(size_total) };
-        sycl::buffer<PrecisionType, 1> out_dev_im{ sycl::range<1>(size_total) };
-        sycl::buffer<PrecisionType, 1> out_back_dev_re{ sycl::range<1>(size_total) };
-        sycl::buffer<PrecisionType, 1> out_back_dev_im{ sycl::range<1>(size_total) };
-
-        try {
-            oneapi::mkl::dft::compute_forward<descriptor_t, PrecisionType, PrecisionType>(
-                descriptor, in_dev_re, in_dev_im, out_dev_re, out_dev_im);
+    {
+        auto acc_out_re = out_dev_re.template get_host_access();
+        auto acc_out_im = out_dev_im.template get_host_access();
+        std::vector<FwdOutputType> output_data(size_total, static_cast<FwdOutputType>(0));
+        for (std::size_t i = 0; i < output_data.size(); ++i) {
+            output_data[i] = { acc_out_re[i], acc_out_im[i] };
         }
-        catch (oneapi::mkl::unimplemented &e) {
-            std::cout << "Skipping test because: \"" << e.what() << "\"" << std::endl;
-            return test_skipped;
-        }
+        EXPECT_TRUE(check_equal_vector(output_data.data(), out_host_ref.data(), output_data.size(),
+                                       abs_error_margin, rel_error_margin, std::cout));
+    }
 
-        {
-            auto acc_out_re = out_dev_re.template get_host_access();
-            auto acc_out_im = out_dev_im.template get_host_access();
-            std::vector<FwdOutputType> output_data(size_total, static_cast<FwdOutputType>(0));
-            for (std::size_t i = 0; i < output_data.size(); ++i) {
-                output_data[i] = { acc_out_re[i], acc_out_im[i] };
-            }
-            EXPECT_TRUE(check_equal_vector(output_data.data(), out_host_ref.data(),
-                                           output_data.size(), abs_error_margin, rel_error_margin,
-                                           std::cout));
-        }
+    try {
+        oneapi::mkl::dft::compute_backward<std::remove_reference_t<decltype(descriptor)>,
+                                           PrecisionType, PrecisionType>(
+            descriptor, out_dev_re, out_dev_im, out_back_dev_re, out_back_dev_im);
+    }
+    catch (oneapi::mkl::unimplemented &e) {
+        std::cout << "Skipping test because: \"" << e.what() << "\"" << std::endl;
+        return test_skipped;
+    }
 
-        try {
-            oneapi::mkl::dft::compute_backward<std::remove_reference_t<decltype(descriptor)>,
-                                               PrecisionType, PrecisionType>(
-                descriptor, out_dev_re, out_dev_im, out_back_dev_re, out_back_dev_im);
+    {
+        auto acc_back_out_re = out_back_dev_re.template get_host_access();
+        auto acc_back_out_im = out_back_dev_im.template get_host_access();
+        std::vector<FwdInputType> output_data(size_total, static_cast<FwdInputType>(0));
+        for (std::size_t i = 0; i < output_data.size(); ++i) {
+            output_data[i] = { acc_back_out_re[i], acc_back_out_im[i] };
         }
-        catch (oneapi::mkl::unimplemented &e) {
-            std::cout << "Skipping test because: \"" << e.what() << "\"" << std::endl;
-            return test_skipped;
-        }
-
-        {
-            auto acc_back_out_re = out_back_dev_re.template get_host_access();
-            auto acc_back_out_im = out_back_dev_im.template get_host_access();
-            std::vector<FwdInputType> output_data(size_total, static_cast<FwdInputType>(0));
-            for (std::size_t i = 0; i < output_data.size(); ++i) {
-                output_data[i] = { acc_back_out_re[i], acc_back_out_im[i] };
-            }
-            EXPECT_TRUE(check_equal_vector(output_data.data(), input.data(), input.size(),
-                                           abs_error_margin, rel_error_margin, std::cout));
-        }
+        EXPECT_TRUE(check_equal_vector(output_data.data(), input.data(), input.size(),
+                                       abs_error_margin, rel_error_margin, std::cout));
     }
 
     return !::testing::Test::HasFailure();

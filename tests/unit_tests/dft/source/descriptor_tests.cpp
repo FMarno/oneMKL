@@ -30,9 +30,11 @@
 #include <CL/sycl.hpp>
 #endif
 
+#include <gtest/gtest.h>
+
 #include "test_helper.hpp"
 #include "test_common.hpp"
-#include <gtest/gtest.h>
+#include <oneapi/mkl/exceptions.hpp>
 
 extern std::vector<sycl::device*> devices;
 
@@ -402,6 +404,17 @@ static void set_readonly_values() {
 }
 
 template <oneapi::mkl::dft::precision precision, oneapi::mkl::dft::domain domain>
+static void real_to_complex_real_real_storage() {
+    if constexpr (domain == oneapi::mkl::dft::domain::REAL) {
+        oneapi::mkl::dft::descriptor<precision, domain> descriptor{ default_1d_lengths };
+
+        EXPECT_THROW(descriptor.set_value(oneapi::mkl::dft::config_param::COMPLEX_STORAGE,
+                                          oneapi::mkl::dft::config_value::REAL_REAL),
+                     oneapi::mkl::invalid_argument);
+    }
+}
+
+template <oneapi::mkl::dft::precision precision, oneapi::mkl::dft::domain domain>
 static void get_commited(sycl::queue& sycl_queue) {
     oneapi::mkl::dft::descriptor<precision, domain> descriptor{ default_1d_lengths };
     commit_descriptor(descriptor, sycl_queue);
@@ -550,6 +563,7 @@ static int test_getter_setter() {
     set_and_get_values<precision, domain>();
     get_readonly_values<precision, domain>();
     set_readonly_values<precision, domain>();
+    real_to_complex_real_real_storage<precision, domain>();
 
     return !::testing::Test::HasFailure();
 }
