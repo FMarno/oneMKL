@@ -165,6 +165,10 @@ foreach(domain ${TARGET_DOMAINS})
     list(APPEND ONEMKL_LIBRARIES_${domain} onemkl_dft_rocfft)
   endif()
 
+  if(domain STREQUAL "dft" AND ENABLE_PORTFFT_BACKEND)
+    list(APPEND ONEMKL_LIBRARIES_${domain} onemkl_dft_portfft)
+  endif()
+
   target_link_libraries(test_main_${domain}_ct PUBLIC
       gtest
       gtest_main
@@ -184,6 +188,7 @@ foreach(domain ${TARGET_DOMAINS})
   endif()
 
   if(BUILD_SHARED_LIBS)
+    add_dependencies(test_main_${domain}_rt ${ONEMKL_LIBRARIES_${domain}})
     set_target_properties(test_main_${domain}_rt
       PROPERTIES BUILD_RPATH $<TARGET_FILE_DIR:onemkl>)
   # Find individual tests within executable

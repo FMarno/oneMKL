@@ -63,6 +63,28 @@ option(ENABLE_ROCSOLVER_BACKEND "Enable the rocSOLVER backend for the LAPACK int
 # dft
 option(ENABLE_CUFFT_BACKEND "Enable the cuFFT backend for the DFT interface" OFF)
 option(ENABLE_ROCFFT_BACKEND "Enable the rocFFT backend for the DFT interface" OFF)
+option(ENABLE_PORTFFT_BACKEND_INTEL_CPU "Enable the portFFT DFT backend for CPU" OFF)
+option(ENABLE_PORTFFT_BACKEND_INTEL_GPU "Enable the portFFT DFT backend for Intel GPU" OFF)
+option(ENABLE_PORTFFT_BACKEND_AMD_GPU "Enable the portFFT DFT backend for AMD GPU" OFF)
+option(ENABLE_PORTFFT_BACKEND_NVIDIA_GPU "Enable the portFFT DFT backend for NVIDIA GPU" OFF)
+
+if (ENABLE_PORTFFT_BACKEND_INTEL_CPU AND ENABLE_MKLCPU_BACKEND)
+  message(SEND_ERROR "ENABLE_PORTFFT_BACKEND_INTEL_CPU and ENABLE_MKLCPU_BACKEND cannot be enabled at the same time. \
+  Only one DFT backend can be enable for each device type.")
+endif()
+if (ENABLE_PORTFFT_BACKEND_INTEL_GPU AND ENABLE_MKLGPU_BACKEND)
+  message(SEND_ERROR "ENABLE_PORTFFT_BACKEND_INTEL_GPU and ENABLE_MKLGPU_BACKEND cannot be enabled at the same time. \
+  Only one DFT backend can be enable for each device type.")
+endif()
+if (ENABLE_PORTFFT_BACKEND_AMD_GPU AND ENABLE_ROCFFT_BACKEND)
+  message(SEND_ERROR "ENABLE_PORTFFT_BACKEND_AMD_GPU and ENABLE_ROCFFT_BACKEND cannot be enabled at the same time. \
+  Only one DFT backend can be enable for each device type.")
+endif()
+if (ENABLE_PORTFFT_BACKEND_NVIDIA_GPU AND ENABLE_CUFFT_BACKEND)
+  message(SEND_ERROR "ENABLE_PORTFFT_BACKEND_NVIDIA_GPU and ENABLE_CUFFT_BACKEND cannot be enabled at the same time. \
+  Only one DFT backend can be enable for each device type.")
+endif()
+set(ENABLE_PORTFFT_BACKEND (ENABLE_PORTFFT_BACKEND_AMD_GPU || ENABLE_PORTFFT_BACKEND_INTEL_CPU ||ENABLE_PORTFFT_BACKEND_INTEL_GPU ||ENABLE_PORTFFT_BACKEND_NVIDIA_GPU))
 
 
 set(ONEMKL_SYCL_IMPLEMENTATION "dpc++" CACHE STRING "Name of the SYCL compiler")
@@ -102,7 +124,8 @@ endif()
 if(ENABLE_MKLGPU_BACKEND
         OR ENABLE_MKLCPU_BACKEND
         OR ENABLE_CUFFT_BACKEND
-	OR ENABLE_ROCFFT_BACKEND)
+	OR ENABLE_ROCFFT_BACKEND
+  OR ENABLE_PORTFFT_BACKEND)
   list(APPEND DOMAINS_LIST "dft")
 endif()
 if(ENABLE_MKLCPU_BACKEND)
