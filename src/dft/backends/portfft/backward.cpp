@@ -29,6 +29,10 @@
 #include "oneapi/mkl/dft/detail/portfft/onemkl_dft_portfft.hpp"
 #include "oneapi/mkl/dft/types.hpp"
 
+#include "portfft_helper.hpp"
+
+#include <portfft.hpp>
+
 namespace oneapi::mkl::dft::portfft {
 // BUFFER version
 
@@ -36,8 +40,12 @@ namespace oneapi::mkl::dft::portfft {
 template <typename descriptor_type>
 ONEMKL_EXPORT void compute_backward(descriptor_type &desc,
                                     sycl::buffer<fwd<descriptor_type>, 1> &inout) {
-    throw oneapi::mkl::unimplemented("DFT", "compute_backward(desc, inout)",
-                                     "not yet implemented.");
+    constexpr auto domain = detail::to_pfft_domain<descriptor_type>();
+
+    if constexpr (domain == pfft::domain::COMPLEX) {
+        auto committed_desc = detail::get_descriptors(desc)[1];
+        committed_desc.compute_backward(inout);
+    }
 }
 
 //In-place transform, using config_param::COMPLEX_STORAGE=config_value::REAL_REAL data format
@@ -53,8 +61,12 @@ template <typename descriptor_type>
 ONEMKL_EXPORT void compute_backward(descriptor_type &desc,
                                     sycl::buffer<bwd<descriptor_type>, 1> &in,
                                     sycl::buffer<fwd<descriptor_type>, 1> &out) {
-    throw oneapi::mkl::unimplemented("DFT", "compute_backward(desc, in, out)",
-                                     "not yet implemented.");
+    constexpr auto domain = detail::to_pfft_domain<descriptor_type>();
+
+    if constexpr (domain == pfft::domain::COMPLEX) {
+        auto committed_desc = detail::get_descriptors(desc)[1];
+        committed_desc.compute_backward(in, out);
+    }
 }
 
 //Out-of-place transform, using config_param::COMPLEX_STORAGE=config_value::REAL_REAL data format
@@ -73,8 +85,15 @@ ONEMKL_EXPORT void compute_backward(descriptor_type &, sycl::buffer<scalar<descr
 template <typename descriptor_type>
 ONEMKL_EXPORT sycl::event compute_backward(descriptor_type &desc, fwd<descriptor_type> *inout,
                                            const std::vector<sycl::event> &dependencies) {
-    throw oneapi::mkl::unimplemented("DFT", "compute_backward(desc, inout, deps)",
-                                     "not yet implemented.");
+    constexpr auto domain = detail::to_pfft_domain<descriptor_type>();
+
+    if constexpr (domain == pfft::domain::COMPLEX) {
+        auto committed_desc = detail::get_descriptors(desc)[1];
+        return committed_desc.compute_backward(inout);
+    }
+    else {
+        return {};
+    }
 }
 
 //In-place transform, using config_param::COMPLEX_STORAGE=config_value::REAL_REAL data format
@@ -92,8 +111,15 @@ template <typename descriptor_type>
 ONEMKL_EXPORT sycl::event compute_backward(descriptor_type &desc, bwd<descriptor_type> *in,
                                            fwd<descriptor_type> *out,
                                            const std::vector<sycl::event> &dependencies) {
-    throw oneapi::mkl::unimplemented("DFT", "compute_backward(desc, in, out, deps)",
-                                     "not yet implemented.");
+    constexpr auto domain = detail::to_pfft_domain<descriptor_type>();
+
+    if constexpr (domain == pfft::domain::COMPLEX) {
+        auto committed_desc = detail::get_descriptors(desc)[1];
+        return committed_desc.compute_backward(in, out);
+    }
+    else {
+        return {};
+    }
 }
 
 //Out-of-place transform, using config_param::COMPLEX_STORAGE=config_value::REAL_REAL data format
