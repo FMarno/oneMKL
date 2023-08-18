@@ -36,6 +36,7 @@
 
 #include <portfft.hpp>
 
+// alias to avoid ambiguity
 namespace pfft = portfft;
 
 namespace oneapi::mkl::dft::portfft {
@@ -50,7 +51,9 @@ private:
         std::conditional_t<dom == dft::domain::REAL,
                            std::integral_constant<pfft::domain, pfft::domain::REAL>,
                            std::integral_constant<pfft::domain, pfft::domain::COMPLEX>>::value;
-    std::optional<pfft::committed_descriptor<scalar, domain>> committed_desc = std::nullopt;
+    // since only complex-to-complex transforms are supported, we expect both directions to be valid or neither.
+    std::optional<std::array<pfft::committed_descriptor<scalar, domain>, 2>> committed_descriptors =
+        std::nullopt;
 
 public:
     portfft_commit(sycl::queue& queue, const dft::detail::dft_values<prec, dom>& config_values)
@@ -62,12 +65,73 @@ public:
         }
     }
 
-    void commit(const dft::detail::dft_values<prec, dom>& config_values) override {}
+    void commit(const dft::detail::dft_values<prec, dom>& config_values) override {
+        // not available in portFFT
+        // real_storage, conj_even_storage, and packed_format don't apply since portFFT only does complex-to-complex transforms.
+        if (config_values.workspace != config_value::ALLOW) {
+            throw mkl::unimplemented("dft/backends/portfft", __FUNCTION__,
+                                     "portFFT only supports ALLOW for the WORKSPACE parameter");
+        }
+        if (config_values.ordering != config_value::ORDERED) {
+            throw mkl::unimplemented("dft/backends/portfft", __FUNCTION__,
+                                     "portFFT only supports ORDERED for the ORDERING parameter");
+        }
+        if (config_values.transpose) {
+            throw mkl::unimplemented("dft/backends/portfft", __FUNCTION__,
+                                     "portFFT does not supported transposed output");
+        }
+
+        // forward descriptor
+        pfft::descriptor<scalar, domain> fwd_desc(
+            { static_cast<std::size_t>(config_values.dimensions[0]) });
+        fwd_desc.forward_scale = config_values.fwd_scale;
+        fwd_desc.backward_scale = config_values.bwd_scale;
+        fwd_desc.number_of_transforms =
+            static_cast<std::size_t>(config_values.number_of_transforms);
+        fwd_desc.complex_storage = config_values.complex_storage == config_value::COMPLEX_COMPLEX
+                                       ? pfft::complex_storage::COMPLEX
+                                       : pfft::complex_storage::REAL_REAL;
+        fwd_desc.placement = config_values.placement == config_value::INPLACE
+                                 ? pfft::placement::IN_PLACE
+                                 : pfft::placement::OUT_OF_PLACE;
+        fwd_desc.forward_strides = { config_values.input_strides.cbegin(),
+                                     config_values.input_strides.cend() };
+        fwd_desc.backward_strides = { config_values.output_strides.cbegin(),
+                                      config_values.output_strides.cend() };
+        fwd_desc.forward_distance = static_cast<std::size_t>(config_values.fwd_dist);
+        fwd_desc.backward_distance = static_cast<std::size_t>(config_values.bwd_dist);
+
+        // backward descriptor
+        pfft::descriptor<scalar, domain> bwd_desc(
+            { static_cast<std::size_t>(config_values.dimensions[0]) });
+        bwd_desc.forward_scale = config_values.fwd_scale;
+        bwd_desc.backward_scale = config_values.bwd_scale;
+        bwd_desc.number_of_transforms =
+            static_cast<std::size_t>(config_values.number_of_transforms);
+        bwd_desc.complex_storage = config_values.complex_storage == config_value::COMPLEX_COMPLEX
+                                       ? pfft::complex_storage::COMPLEX
+                                       : pfft::complex_storage::REAL_REAL;
+        bwd_desc.placement = config_values.placement == config_value::INPLACE
+                                 ? pfft::placement::IN_PLACE
+                                 : pfft::placement::OUT_OF_PLACE;
+        bwd_desc.forward_strides = { config_values.output_strides.cbegin(),
+                                     config_values.output_strides.cend() };
+        bwd_desc.backward_strides = { config_values.input_strides.cbegin(),
+                                      config_values.input_strides.cend() };
+        bwd_desc.forward_distance = static_cast<std::size_t>(config_values.fwd_dist);
+        bwd_desc.backward_distance = static_cast<std::size_t>(config_values.bwd_dist);
+
+        committed_descriptors = { fwd_desc.commit(this->get_queue()),
+                                  bwd_desc.commit(this->get_queue()) };
+    }
 
     ~portfft_commit() override = default;
 
     void* get_handle() noexcept override {
-        return &committed_desc;
+        if (committed_descriptors) {
+            return &committed_descriptors.value();
+        }
+        return nullptr;
     }
 
 #define BACKEND portfft
