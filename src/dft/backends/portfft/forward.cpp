@@ -45,8 +45,7 @@ ONEMKL_EXPORT void compute_forward(descriptor_type &desc,
     constexpr auto domain = detail::to_pfft_domain<descriptor_type>();
 
     if constexpr (domain == pfft::domain::COMPLEX) {
-        auto committed_desc = detail::get_descriptors(desc)[0];
-        committed_desc.compute_forward(inout);
+        detail::get_descriptors(desc)[0]->compute_forward(inout);
     }
 }
 
@@ -65,8 +64,7 @@ ONEMKL_EXPORT void compute_forward(descriptor_type &desc, sycl::buffer<fwd<descr
     constexpr auto domain = detail::to_pfft_domain<descriptor_type>();
 
     if constexpr (domain == pfft::domain::COMPLEX) {
-        auto committed_desc = detail::get_descriptors(desc)[0];
-        committed_desc.compute_forward(in, out);
+        detail::get_descriptors(desc)[0]->compute_forward(in, out);
     }
 }
 
@@ -89,8 +87,7 @@ ONEMKL_EXPORT sycl::event compute_forward(descriptor_type &desc, fwd<descriptor_
     constexpr auto domain = detail::to_pfft_domain<descriptor_type>();
 
     if constexpr (domain == pfft::domain::COMPLEX) {
-        auto committed_desc = detail::get_descriptors(desc)[0];
-        return committed_desc.compute_forward(inout);
+        return detail::get_descriptors(desc)[0]->compute_forward(inout);
     }
     else {
         return {};
@@ -115,8 +112,7 @@ ONEMKL_EXPORT sycl::event compute_forward(descriptor_type &desc, fwd<descriptor_
     constexpr auto domain = detail::to_pfft_domain<descriptor_type>();
 
     if constexpr (domain == pfft::domain::COMPLEX) {
-        auto committed_desc = detail::get_descriptors(desc)[0];
-        return committed_desc.compute_forward(in, out);
+        return detail::get_descriptors(desc)[0]->compute_forward(in, out);
     }
     else {
         return {};

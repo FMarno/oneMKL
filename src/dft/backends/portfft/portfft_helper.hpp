@@ -51,7 +51,8 @@ template <typename descriptor_type>
 auto get_descriptors(descriptor_type &desc) {
     constexpr auto domain = detail::to_pfft_domain<descriptor_type>();
     auto commit = detail::checked_get_commit(desc);
-    return reinterpret_cast<pfft::committed_descriptor<scalar<descriptor_type>, domain> *>(
+    using array_type = std::unique_ptr<pfft::committed_descriptor<scalar<descriptor_type>, domain>>;
+    return reinterpret_cast<array_type*>(
         commit->get_handle());
 }
 } // namespace oneapi::mkl::dft::portfft::detail

@@ -43,8 +43,7 @@ ONEMKL_EXPORT void compute_backward(descriptor_type &desc,
     constexpr auto domain = detail::to_pfft_domain<descriptor_type>();
 
     if constexpr (domain == pfft::domain::COMPLEX) {
-        auto committed_desc = detail::get_descriptors(desc)[1];
-        committed_desc.compute_backward(inout);
+        detail::get_descriptors(desc)[1]->compute_backward(inout);
     }
 }
 
@@ -64,8 +63,7 @@ ONEMKL_EXPORT void compute_backward(descriptor_type &desc,
     constexpr auto domain = detail::to_pfft_domain<descriptor_type>();
 
     if constexpr (domain == pfft::domain::COMPLEX) {
-        auto committed_desc = detail::get_descriptors(desc)[1];
-        committed_desc.compute_backward(in, out);
+        detail::get_descriptors(desc)[1]->compute_backward(in, out);
     }
 }
 
@@ -88,8 +86,7 @@ ONEMKL_EXPORT sycl::event compute_backward(descriptor_type &desc, fwd<descriptor
     constexpr auto domain = detail::to_pfft_domain<descriptor_type>();
 
     if constexpr (domain == pfft::domain::COMPLEX) {
-        auto committed_desc = detail::get_descriptors(desc)[1];
-        return committed_desc.compute_backward(inout);
+        return detail::get_descriptors(desc)[1]->compute_backward(inout);
     }
     else {
         return {};
@@ -114,8 +111,7 @@ ONEMKL_EXPORT sycl::event compute_backward(descriptor_type &desc, bwd<descriptor
     constexpr auto domain = detail::to_pfft_domain<descriptor_type>();
 
     if constexpr (domain == pfft::domain::COMPLEX) {
-        auto committed_desc = detail::get_descriptors(desc)[1];
-        return committed_desc.compute_backward(in, out);
+        return detail::get_descriptors(desc)[1]->compute_backward(in, out);
     }
     else {
         return {};

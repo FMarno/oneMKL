@@ -51,9 +51,9 @@ private:
         std::conditional_t<dom == dft::domain::REAL,
                            std::integral_constant<pfft::domain, pfft::domain::REAL>,
                            std::integral_constant<pfft::domain, pfft::domain::COMPLEX>>::value;
+    using committed_desc = pfft::committed_descriptor<scalar, domain>;
     // since only complex-to-complex transforms are supported, we expect both directions to be valid or neither.
-    std::optional<std::array<pfft::committed_descriptor<scalar, domain>, 2>> committed_descriptors =
-        std::nullopt;
+    std::array<std::unique_ptr<committed_desc>, 2> committed_descriptors;
 
 public:
     portfft_commit(sycl::queue& queue, const dft::detail::dft_values<prec, dom>& config_values)
@@ -83,7 +83,7 @@ public:
 
         // forward descriptor
         pfft::descriptor<scalar, domain> fwd_desc(
-            { static_cast<std::size_t>(config_values.dimensions[0]) });
+            { config_values.dimensions.cbegin(), config_values.dimensions.cend() });
         fwd_desc.forward_scale = config_values.fwd_scale;
         fwd_desc.backward_scale = config_values.bwd_scale;
         fwd_desc.number_of_transforms =
@@ -103,7 +103,7 @@ public:
 
         // backward descriptor
         pfft::descriptor<scalar, domain> bwd_desc(
-            { static_cast<std::size_t>(config_values.dimensions[0]) });
+            { config_values.dimensions.cbegin(), config_values.dimensions.cend() });
         bwd_desc.forward_scale = config_values.fwd_scale;
         bwd_desc.backward_scale = config_values.bwd_scale;
         bwd_desc.number_of_transforms =
@@ -121,17 +121,32 @@ public:
         bwd_desc.forward_distance = static_cast<std::size_t>(config_values.fwd_dist);
         bwd_desc.backward_distance = static_cast<std::size_t>(config_values.bwd_dist);
 
-        committed_descriptors = { fwd_desc.commit(this->get_queue()),
-                                  bwd_desc.commit(this->get_queue()) };
+        try {
+            auto q = this->get_queue();
+            committed_descriptors = { std::make_unique<committed_desc>(fwd_desc, q),
+                                      std::make_unique<committed_desc>(bwd_desc, q) };
+        }
+        catch (const pfft::unsupported_configuration& e) {
+            throw oneapi::mkl::unimplemented("dft/backends/portfft", __FUNCTION__, e.what());
+        }
+        {
+            auto q = this->get_queue();
+            sycl::buffer<std::complex<scalar>, 1> inout_buf{ sycl::range<1>(8) };
+            auto usm_ptr = sycl::malloc_device<std::complex<scalar>>(8, q);
+
+      //      committed_descriptors[0]->compute_forward(inout_buf);
+      //      committed_descriptors[1]->compute_backward(inout_buf);
+            committed_descriptors[0]->compute_forward(usm_ptr);
+            committed_descriptors[1]->compute_backward(usm_ptr);
+            sycl::free(usm_ptr, q);
+            q.wait_and_throw();
+        }
     }
 
     ~portfft_commit() override = default;
 
     void* get_handle() noexcept override {
-        if (committed_descriptors) {
-            return &committed_descriptors.value();
-        }
-        return nullptr;
+        return committed_descriptors.data();
     }
 
 #define BACKEND portfft
