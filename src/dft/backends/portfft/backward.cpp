@@ -31,7 +31,7 @@
 
 #include "portfft_helper.hpp"
 
-#include <portfft.hpp>
+#include <portfft/portfft.hpp>
 
 namespace oneapi::mkl::dft::portfft {
 // BUFFER version

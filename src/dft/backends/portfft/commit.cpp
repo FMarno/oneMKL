@@ -34,7 +34,7 @@
 #include "oneapi/mkl/dft/detail/portfft/onemkl_dft_portfft.hpp"
 #include "oneapi/mkl/dft/types.hpp"
 
-#include <portfft.hpp>
+#include <portfft/portfft.hpp>
 
 // alias to avoid ambiguity
 namespace pfft = portfft;
